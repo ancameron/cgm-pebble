@@ -36,15 +36,20 @@ function fetchCgmData() {
     // show current options
     //console.log("fetchCgmData IN OPTIONS = " + JSON.stringify(opts));
   
-    // call XML
+    // declare XML request
     var req = new XMLHttpRequest();
-    
-    // get cgm data
-    req.open('GET', opts.endpoint, true);
-    
-    req.setRequestHeader('Cache-Control', 'no-cache');
+ 
+    // set timeout function
+    var myCGMTimeout = setTimeout (function () {
+      req.abort();
+      message = {
+        dlta: "OFF"
+      };          
+      console.log("TIMEOUT, DATA OFFLINE JS message", JSON.stringify(message));
+      MessageQueue.sendAppMessage(message);
+    }, 59000 ); // timeout in ms; set at 59 seconds; can not go beyond 59 seconds  
 	
-    req.onload = function(e) {
+   req.onload = function(e) {
 
         if (req.readyState == 4) {
 
@@ -71,7 +76,7 @@ function fetchCgmData() {
                     values = " ",
                     currentIcon = "10",
                     currentBG = responsebgs[0].sgv,
-                    //currentBG = "107",
+                    //currentBG = "100",
                     currentConvBG = currentBG,
                     rawCalcOffset = 5,
                     specialValue = false,
@@ -150,6 +155,7 @@ function fetchCgmData() {
                     // putting NOT COMPUTABLE first because that's most common and can get out fastest
                     switch (currentDirection) {
                       case "NOT COMPUTABLE": currentIcon = "8"; break;
+                      case "NOT_COMPUTABLE": currentIcon = "8"; break;
                       case "NONE": currentIcon = "0"; break;
                       case "DoubleUp": currentIcon = "1"; break;
                       case "SingleUp": currentIcon = "2"; break;
@@ -206,10 +212,9 @@ function fetchCgmData() {
                       if ( (currentCalcRaw > 500) && (currentCalcRaw <= 900) ) { formatCalcRaw = "HI"; }
                       if ( (currentCalcRaw < 0 ) || (currentCalcRaw > 900) ) { formatCalcRaw = "ERR"; }
                       
-                      // if slope or intercept are at 0, or if currentCalcRaw is NaN, 
+                      // if slope is 0 or if currentCalcRaw is NaN, 
                       // calculated raw is invalid and need a calibration
-                      if ( (currentSlope === 0) || (currentIntercept === 0) || 
-                           (isNaN(currentCalcRaw)) ) { formatCalcRaw = "CAL"; }
+                      if ( (currentSlope === 0) || (isNaN(currentCalcRaw)) ) { formatCalcRaw = "CAL"; }
                       
                       // check for compression warning
                       if ( ((currentCalcRaw < (currentRawFilt/1000)) && (!calibrationValue)) && (currentRawFilt !== 0) ){
@@ -317,18 +322,25 @@ function fetchCgmData() {
                     console.log("DATA OFFLINE JS message", JSON.stringify(message));
                     MessageQueue.sendAppMessage(message);
                 }
-            } // end req.status == 200
+            } else {
+			  console.log("XMLHttpRequest error, not 200: " + req.statusText);
+			} // end req.status == 200
         } // end req.readyState == 4
-    }; // req.onload
+    }; // end req.onload
+	
+	req.onerror = function (e) {
+	  console.log("XMLHttpRequest error: " + req.statusText);
+	}; // end req.onerror
+ 
+	// set rest of req
+    req.open('GET', opts.endpoint, true);  
+    req.setRequestHeader('Cache-Control', 'no-cache');	
+	req.timeout = 59000; // Set timeout to 59 seconds (59000 milliseconds); can not go beyond 59 seconds
+	req.ontimeout = myCGMTimeout;
+	
+	// get cgm data
     req.send(null);
-    var myCGMTimeout = setTimeout (function () {
-      req.abort();
-      message = {
-        dlta: "OFF"
-      };          
-      console.log("DATA OFFLINE JS message", JSON.stringify(message));
-      MessageQueue.sendAppMessage(message);
-    }, 59000 ); // timeout in ms; set at 45 seconds; can not go beyond 59 seconds      
+	
 } // end fetchCgmData
 
 // message queue-ing to pace calls from C function on watch
